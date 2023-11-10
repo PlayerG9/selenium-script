@@ -31,7 +31,7 @@ class ScriptEngine:
             line: str = line.strip()
             if not line or line.startswith("#"):
                 continue
-            action_raw, *args = shlex.split(line)
+            action_raw, *args = shlex.split(line, comments=True)
             action = format_action(action_raw)
             function = getattr(self, f'action_{action}', None)
             if function is None:
@@ -109,5 +109,8 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_set(self, name: str, value: t.Any):
+    def action_default(self, name: str, value: str):
+        self.context.setdefault(name, value)
+
+    def action_set(self, name: str, value: str):
         self.context[name] = value
