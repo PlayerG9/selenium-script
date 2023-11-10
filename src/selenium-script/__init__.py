@@ -13,3 +13,7 @@ __status__ = "Prototype"  # Prototype, Development, Production
 __description__ = "selenium-script interpreter"
 __version_info__ = (0, 1, 0)
 __version__ = '.'.join(map(str, __version_info__))
+
+from .exceptions import *
+from .engine import ScriptEngine
+from .logging_context import LoggingContextFilter

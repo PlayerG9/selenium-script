@@ -3,9 +3,22 @@ r"""
 
 """
 import logging
+import sys
+import typing as t
 import argparse as ap
 from pathlib import Path
-from . import __version__ as interpreter_version
+from . import (
+    __version__ as interpreter_version,
+    ScriptEngine,
+    LoggingContextFilter,
+)
+from .exceptions import *
+
+
+class Namespace:
+    debug: bool
+    logging: t.Literal["DEBUG", "INFO", "WARN", "WARNING", "ERROR", "CRITICAL"]
+    script: Path
 
 
 parser = ap.ArgumentParser(
@@ -13,37 +26,43 @@ parser = ap.ArgumentParser(
 )
 parser.add_argument('-v', '--version', action="version", version=interpreter_version)
 parser.add_argument('--logging',
-                    choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL'],
+                    choices=["DEBUG", "INFO", "WARN", "WARNING", "ERROR", "CRITICAL"],
                     help="how much information to output")
 parser.add_argument('--debug', action=ap.BooleanOptionalAction,
                     help="run in debug mode (shows the browser)")
 parser.add_argument('script', type=Path,
                     help="script to run")
 
-args = parser.parse_args()
+args = parser.parse_args(namespace=Namespace())
 
 
 def configure_logging():
-    class FallbackFilter(logging.Filter):
-        def filter(self, record):
-            if not hasattr(record, "scriptLine"):
-                record.scriptLine = "---"
-            return True
-
     logging.basicConfig(
         format="{asctime} | {levelname:.3} | {scriptLine:>3} | {message}",
-        # format="{asctime} | {levelname:.3} | {module:>15}.{funcName:<20} | {lineno:3} | {message}",
         style="{",
         level=args.logging or (logging.DEBUG if args.debug else logging.INFO),
     )
-    # logging.root.addFilter(logging.Filter("__main__"))
-    logging.root.addFilter(FallbackFilter())
+    logging.root.addFilter(LoggingContextFilter())
 
 
 def main():
     configure_logging()
     logging.debug(str(vars(args)))
 
+    with args.script.open() as script_file:
+        script = script_file.read()
+
+    engine = ScriptEngine(script)
+    try:
+        engine.execute()
+    except ScriptRuntimeError as error:
+        logging.critical(f"{type(error).__name__}: {error}")
+        return 1
+    return 0
+
 
 if __name__ == '__main__':
-    main()
+    try:
+        sys.exit(main() or 0)
+    except QuietExit as exc:
+        sys.exit(exc.return_code)
