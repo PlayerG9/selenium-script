@@ -9,13 +9,13 @@ git clone https://github.com/PlayerG9/selenium-script.git
 
 ### Installation with _pipenv_
 ```bash
-cd selection-script
+cd selenium-script/
 PIPENV_VENV_IN_PROJECT=1 pipenv install
 ```
 
 ### Installation with _venv_ and _pip_
 ```bash
-cd selection-script/
+cd selenium-script/
 python3 -m venv .venv
 .venv/bin/pip3 install -r requirements.txt
 ```
