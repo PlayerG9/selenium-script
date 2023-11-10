@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
+THIS=$(dirname "$(realpath "$0")")
+
+PYTHONPATH="$PYTHONPATH:$THIS/src/" "$THIS/.venv/bin/python3" -B -O -m selenium-script "$@"
