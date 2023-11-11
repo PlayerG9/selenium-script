@@ -37,12 +37,21 @@ args = parser.parse_args(namespace=Namespace())
 
 
 def configure_logging():
+    class LogRecordFactory(logging.LogRecord):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self.scriptLine = "---"
+
     logging.basicConfig(
-        format="{asctime} | {levelname:.3} | {scriptLine:>3} | {message}",
+        format="{asctime} | {levelname:.3} | {scriptLine:>3} | {name:>10} | {message}",
         style="{",
         level=args.logging or (logging.DEBUG if args.debug else logging.INFO),
     )
-    logging.root.addFilter(LoggingContextFilter())
+    logging.setLogRecordFactory(LogRecordFactory)
+    for handler in logging.root.handlers:
+        if not args.debug:  # disable logging of other modules if not in debug-mode
+            handler.addFilter(logging.Filter(name="root"))
+        handler.addFilter(LoggingContextFilter())
 
 
 def main():

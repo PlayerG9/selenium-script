@@ -14,8 +14,6 @@ class LoggingContextFilter(logging.Filter):
     def filter(self, record):
         for key, value in vars(logging_context_data).items():
             setattr(record, key, value)
-        if not hasattr(record, "scriptLine"):
-            record.scriptLine = "---"
         return True
 
 
