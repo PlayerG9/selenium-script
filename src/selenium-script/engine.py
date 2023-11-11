@@ -400,3 +400,5 @@ class ScriptEngine:
         else:
             web_element = self.web_element
         web_element.click()
+
+    action_press = action_click
