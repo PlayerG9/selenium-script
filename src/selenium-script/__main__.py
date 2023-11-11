@@ -61,7 +61,7 @@ def main():
     with args.script.open() as script_file:
         script = script_file.read()
 
-    engine = ScriptEngine(script)
+    engine = ScriptEngine(script, debug=args.debug)
     try:
         engine.execute()
     except ScriptRuntimeError as error:
