@@ -33,10 +33,6 @@ class ScriptCompileError(SeleniumScriptError):
     pass
 
 
-class ScriptSyntaxError(ScriptCompileError):
-    pass
-
-
 class ScriptUnsupportedTokenError(ScriptCompileError):
     pass
 
@@ -45,6 +41,10 @@ class ScriptUnsupportedTokenError(ScriptCompileError):
 
 
 class ScriptRuntimeError(SeleniumScriptError):
+    pass
+
+
+class ScriptSyntaxError(ScriptRuntimeError):
     pass
 
 
