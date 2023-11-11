@@ -2,11 +2,11 @@
 r"""
 
 """
-import logging
 import sys
+import logging
 import typing as t
+import os.path as p
 import argparse as ap
-from pathlib import Path
 from . import (
     __version__ as interpreter_version,
     ScriptEngine,
@@ -18,7 +18,7 @@ from .exceptions import *
 class Namespace:
     debug: bool
     logging: t.Literal["DEBUG", "INFO", "WARN", "WARNING", "ERROR", "CRITICAL"]
-    script: Path
+    script: str
 
 
 parser = ap.ArgumentParser(
@@ -30,7 +30,7 @@ parser.add_argument('--logging',
                     help="how much information to output")
 parser.add_argument('--debug', action=ap.BooleanOptionalAction,
                     help="run in debug mode (shows the browser)")
-parser.add_argument('script', type=Path,
+parser.add_argument('script', type=p.abspath,
                     help="script to run")
 
 args = parser.parse_args(namespace=Namespace())
@@ -43,7 +43,7 @@ def configure_logging():
             self.scriptLine = "---"
 
     logging.basicConfig(
-        format="{asctime} | {levelname:.3} | {scriptLine:>3} | {name:>10} | {message}",
+        format="{asctime} | {levelname:.3} | {scriptLine:>3} | {message}",
         style="{",
         level=args.logging or (logging.DEBUG if args.debug else logging.INFO),
     )
@@ -58,10 +58,7 @@ def main():
     configure_logging()
     logging.debug(str(vars(args)))
 
-    with args.script.open() as script_file:
-        script = script_file.read()
-
-    engine = ScriptEngine(script, debug=args.debug)
+    engine = ScriptEngine(args.script, debug=args.debug)
     try:
         engine.execute()
     except ScriptRuntimeError as error:

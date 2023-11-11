@@ -2,16 +2,15 @@
 r"""
 
 """
-import io
 import os
 import time
 import shlex
 import random
 import inspect
 import logging
-import traceback
 import typing as t
 import datetime as dt
+from dotenv import dotenv_values
 from selenium.webdriver import (
     Keys,
     Chrome as ChromeBrowser,
@@ -25,6 +24,7 @@ from selenium.webdriver import (
     Remote as BrowserType,
 )
 from selenium.webdriver.remote.webelement import WebElement, By
+from selenium.common.exceptions import *
 from .exceptions import *
 from .util import *
 from .logging_context import LoggingContext
@@ -42,11 +42,11 @@ class ScriptEngine:
     _web_element: t.Optional[WebElement] = None
     delay_between_actions: t.Optional[t.Union[float, t.Tuple[float, float]]] = 0.0
 
-    def __init__(self, source: t.Union[str, t.TextIO], *, debug: bool = False, context: t.Dict[str, t.Any] = None):
+    def __init__(self, source: str, *, debug: bool = False, context: t.Dict[str, t.Any] = None):
         self.debug_mode = debug
-        if isinstance(source, str):
-            source = io.StringIO(source)
-        self.tokens = self.compile(source)
+        self.source = source
+        with open(source) as source_file:
+            self.tokens = self.compile(source_file)
         self.context = dict()
         self.context.update(KEYS_CONTEXT)
         self.context.update(os.environ)
@@ -193,6 +193,14 @@ class ScriptEngine:
         r"""set a variable"""
         self.context[name] = value
 
+    def action_load(self, path: str):
+        r"""loads a dotenv file"""
+        filepath = os.path.join(os.path.dirname(self.source), path)
+        if not os.path.isfile(filepath):
+            raise ScriptRuntimeError(f"Missing dotenv file: {filepath!r}")
+        logging.info(f"Loading: {filepath!r}")
+        self.context.update(dotenv_values(filepath))
+
     # ---------------------------------------------------------------------------------------------------------------- #
 
     def action_init(self, browser: str, *arguments: str):
@@ -249,17 +257,37 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_select(self, query: str):
+    def action_select(self, *query: str):
         r"""select an element"""
-        self._web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=query)
+        if not query:
+            self.action_unselect()
+        else:
+            self._web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
+
+    def action_select_name(self, name: str):
+        self._web_element = self.browser.find_element(by=By.NAME, value=name)
+
+    def action_select_xpath(self, xpath: str):
+        r"""select element by xpath"""
+        self._web_element = self.browser.find_element(by=By.XPATH, value=xpath)
+
+    def action_select_link_text(self, *text: str):
+        r"""Select link that contains text"""
+        self._web_element.find_element(by=By.LINK_TEXT, value=' '.join(text))
+
+    def action_select_link_partial_text(self, *text: str):
+        r"""select link that contains partially text"""
+        self._web_element.find_element(by=By.PARTIAL_LINK_TEXT, value=' '.join(text))
 
     def action_unselect(self):
         r"""unselect the current element"""
         self._web_element = None
 
-    def select_child(self, query: str):
+    def select_child(self, *query: str):
         r"""select a child element"""
-        self._web_element = self.web_element.find_element(by=By.CSS_SELECTOR, value=query)
+        if not query:
+            raise ScriptSyntaxError("Missing query selector for SELECT-CHILD")
+        self._web_element = self.web_element.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
@@ -309,6 +337,7 @@ class ScriptEngine:
 
     def action_breakpoint(self):
         if self.debug_mode:
+            logging.debug("Breakpoint")
             input("Press return to continue.")
 
     @staticmethod
@@ -343,7 +372,7 @@ class ScriptEngine:
             raise ScriptValueError("ACTION-DELTA takes only timedelta")
 
         n_params = len(delays)
-        dash_index = delays.index('-')
+        dash_index = delays.index('-') if '-' in delays else -1
 
         if n_params == 1 and isinstance(delays[0], str) and delays[0].lower() == "off":  # ACTION-DELTA OFF
             self.delay_between_actions = None
@@ -354,7 +383,7 @@ class ScriptEngine:
         elif delays.count('-') == 1 and 0 < dash_index < n_params:  # ACTION-DELTA 000ms - 000ms
             middle = delays.index('-')
             a = sum(delay.total_seconds() for delay in delays[:middle])
-            b = sum(delay.total_seconds() for delay in delays[middle:])
+            b = sum(delay.total_seconds() for delay in delays[middle+1:])
             self.delay_between_actions = (min(a, b), max(a, b))
         else:
             raise ScriptSyntaxError("Couldn't understand the ACTION-DELAY")
@@ -381,22 +410,26 @@ class ScriptEngine:
 
     def action_refresh(self):
         r"""refresh the current page"""
+        logging.info("Refreshing the Page")
         self.browser.refresh()
 
     def action_forward(self):
         r"""go forwards on page"""
+        logging.debug("Going one step forward in the browser history")
         self.browser.forward()
 
     def action_back(self):
         r"""go backwards on page"""
+        logging.debug("Going one step backward in the browser history")
         self.browser.back()
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_click(self, query: str = None):
+    def action_click(self, *query: str):
         r"""clicks the current element"""
-        if query is not None:
-            web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=query)
+        if query:
+            logging.debug(f"CLICK {' '.join(query)!r}")
+            web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
         else:
             web_element = self.web_element
         web_element.click()
