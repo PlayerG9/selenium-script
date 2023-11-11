@@ -14,9 +14,9 @@ Write a script that controls your browser.
 # This script opens google.com and makes a "Lucky" search
 ################################################################################
 
-INIT Chrome  # initialize a chrom instance
+INIT Chrome  # initialize a chrome instance
 IMPLICITLY-WAIT 5s  # implicitly wait up to 5s while searching for an element
-ACTION-DELAY 200ms - 400ms  # wait randomly 100ms-200ms between the actions
+ACTION-DELAY 200ms - 400ms  # wait randomly 200ms-400ms between the actions
 VISIT https://google.com/  # go to google
 
 TAB 4  # Tab-Through to Reject-Cookies button (has no identifier to SELECT)
