@@ -15,6 +15,10 @@ __all__ = [
 ]
 
 
+def filtertrue(iterable: t.Iterable) -> t.Iterable:
+    return (e for e in iterable if e)
+
+
 UNIT2FACTOR: t.Dict[str, float] = dict(
     ms=1/1000,
     s=1,
@@ -42,7 +46,7 @@ def parse(string: str) -> t.Any:
         return boolean_match.group('true') is not None
     timedelta_match = __RE_TIMEDELTA.fullmatch(string)
     if timedelta_match:
-        parts = __RE_TIMEDELTA_SPLIT.split(string)
+        parts = filtertrue(__RE_TIMEDELTA_SPLIT.split(string))
         return dt.timedelta(seconds=sum(
             float(match.group("amount")) * UNIT2FACTOR[match.group("unit")]
             for match in map(__RE_SINGLE_TIMEDELTA.fullmatch, parts)
@@ -82,7 +86,7 @@ def parse_timedelta(string: str) -> dt.timedelta:
     timedelta_match = __RE_TIMEDELTA.fullmatch(string)
     if timedelta_match is None:
         raise ScriptValueError(f"Can't parse to timedelta: {string!r}")
-    parts = [p for p in __RE_TIMEDELTA_SPLIT.split(string) if p]
+    parts = filtertrue(__RE_TIMEDELTA_SPLIT.split(string))
     return dt.timedelta(seconds=sum(
         float(match.group("amount")) * UNIT2FACTOR[match.group("unit")]
         for match in map(__RE_SINGLE_TIMEDELTA.fullmatch, parts)

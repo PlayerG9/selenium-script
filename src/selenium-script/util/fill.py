@@ -15,6 +15,9 @@ __RE_CONTEXT = re.compile(
     r'\$\{([^}]+?)}|\$(\S+)|(@\S+)',
     re.I
 )
+# should be useful for `ACTION $VAR` vs `ACTION "$VAR"` but that's for later
+# __RE_ESCAPE = re.compile(r'(["\'])')
+# __RE_ESCAPE.sub(r"\\\1", str(value))
 
 
 def fill(string: str, context: t.Dict[str, t.Any]) -> str:
@@ -22,7 +25,8 @@ def fill(string: str, context: t.Dict[str, t.Any]) -> str:
         name = match.group(match.lastindex)
         try:
             value = context[name]
-        except KeyError:
+        except KeyError as err:
+            print([string, name, err])
             raise ScriptMissingVariableError(name)
         else:
             return "" if value is None else str(value)
