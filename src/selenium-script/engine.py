@@ -261,14 +261,20 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_select(self, *query: str):
+    def action_select(self, query: str, *extra: str):
         r"""select an element"""
-        if not query:
-            self.action_unselect()
-        else:
-            self._web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
+        query = ' '.join((query,) + extra)
+        self._web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=query)
+
+    def action_waiting_select(self, query: str, *extra: str):
+        r"""Like SELECT but waits for the element"""
+        query = ' '.join((query,) + extra)
+        self._web_element = WebDriverWait(self.browser, timeout=self.wait_for_timeout).until(
+            expected_conditions.presence_of_element_located((By.CSS_SELECTOR, query))
+        )
 
     def action_select_name(self, name: str):
+        r"""SELECT '[name="value"]'"""
         self._web_element = self.browser.find_element(by=By.NAME, value=name)
 
     def action_select_xpath(self, xpath: str):
