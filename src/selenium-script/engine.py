@@ -9,7 +9,6 @@ import random
 import inspect
 import logging
 import typing as t
-import datetime as dt
 from dotenv import dotenv_values
 from selenium.webdriver import (
     Keys,
@@ -27,7 +26,7 @@ from selenium.webdriver.remote.webelement import WebElement, By
 # from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
-# from selenium.common.exceptions import *
+from selenium.common.exceptions import *
 from .exceptions import *
 from .util import *
 from .logging_context import LoggingContext
@@ -107,16 +106,21 @@ class ScriptEngine:
                         logging.critical(f"Internal Error: {type(error).__name__} ({error})", exc_info=error)
                         raise QuietExit(1)
                 self.wait_action_delay()
+        except BaseException as exception:
+            if self.debug_mode:
+                import traceback
+                traceback.print_exception(type(exception), exception, exception.__traceback__)
+            raise exception
         finally:
             if self._browser is not None:
                 logging.warning("Abnormally quitting the browser")
                 self._browser.quit()
 
     def call_action(self, action: str, arguments: t.Tuple[str, ...], context: t.Dict[str, t.Any]):
-        function = getattr(self, f'action_{action}')
         args = []
-
+        function = getattr(self, f'action_{action}')
         signature = inspect.signature(function)
+        filled_arguments = [fill(arg, context=context) for arg in arguments]
 
         for index, parameter in enumerate(signature.parameters.values()):
             parameter: inspect.Parameter
@@ -125,14 +129,17 @@ class ScriptEngine:
             else:
                 parser = PARSE_MAP[parameter.annotation]
             if parameter.kind == parameter.VAR_POSITIONAL:
-                raws = arguments[index:]
-                values = [fill(raw, context=context) for raw in raws]
+                values = filled_arguments[index:]
                 args.extend(map(parser, values))
                 break
             else:
-                raw = arguments[index]
-                value = fill(raw, context=context)
-                args.append(parser(value))
+                try:
+                    value = filled_arguments[index]
+                except IndexError as error:
+                    if parameter.default is parameter.empty:
+                        raise error
+                else:
+                    args.append(parser(value))
 
         return function(*args)
 
@@ -189,12 +196,14 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_default(self, name: str, value: str):
+    def action_default(self, name: str, *parts: str):
         r"""sets the variable if not exists"""
+        value = ' '.join(parts)
         self.context.setdefault(name, value)
 
-    def action_set(self, name: str, value: str):
+    def action_set(self, name: str, *parts: str):
         r"""set a variable"""
+        value = ' '.join(parts)
         self.context[name] = value
 
     def action_load(self, path: str):
@@ -346,9 +355,29 @@ class ScriptEngine:
     # ---------------------------------------------------------------------------------------------------------------- #
 
     def action_breakpoint(self):
+        r"""used for debugging and only with the --debug flag"""
         if self.debug_mode:
             logging.debug("Breakpoint")
             input("Press return to continue.")
+
+    def action_wait_for_user_interrupt(self):
+        r"""
+        waits for the browser to close or for ctrl+c in the terminal
+
+        *useful if the script make a browser-setup for the user
+        """
+        logging.info("press `ctrl+c` to continue")
+        try:
+            for _ in range(60*60):  # 1h max
+                time.sleep(1)
+                try:
+                    self.browser.current_window_handle  # noqa
+                except WebDriverException:
+                    raise KeyboardInterrupt("Window got closed")
+        except KeyboardInterrupt:
+            pass
+
+    action_wait_for_user = action_wait_for_user_interrupt
 
     @staticmethod
     def action_sleep(*deltas: str):
@@ -365,7 +394,7 @@ class ScriptEngine:
         - h  - hours (why the hell would you need that? but I don't care)
         """
         line = ''.join(deltas)
-        if '-' in line:
+        if line.count('-') == 1:
             minimum, maximum = map(parse_timedelta, line.split('-', 1))
             total = random.uniform(minimum.total_seconds(), maximum.total_seconds())
         else:
@@ -385,6 +414,7 @@ class ScriptEngine:
         WAIT-TILL URL https://something.com/
         WAIT-TILL URL-TO-BE https://something.com/
         WAIT-TILL INTERACTIVE
+        WAIT-TILL PAGE-INTERACTIVE
         WAIT-TILL LOADED
         WAIT-TILL PAGE-LOADED
         """
@@ -409,6 +439,7 @@ class ScriptEngine:
             url=expected_conditions.url_to_be(query),
             url_to_be=expected_conditions.url_to_be(query),
             interactive=lambda driver: driver.execute_script("return document.readyState") == "interactive",
+            page_interactive=lambda driver: driver.execute_script("return document.readyState") == "interactive",
             loaded=lambda driver: driver.execute_script("return document.readyState") == "complete",
             page_loaded=lambda driver: driver.execute_script("return document.readyState") == "complete",
         )[what.lower().replace('-', '_')]
@@ -419,7 +450,7 @@ class ScriptEngine:
         else:
             wait.until(condition, message=timeout_message)
 
-    def action_action_delay(self, *delays: t.Any):
+    def action_action_delay(self, *parts: str):
         r"""
         sets the delay between actions
 
@@ -428,25 +459,22 @@ class ScriptEngine:
         - ACTION-DELAY 100ms
         - ACTION-DELAY 100ms - 200ms
         """
-        if not all(isinstance(delay, (dt.timedelta, str)) for delay in delays):
-            raise ScriptValueError("ACTION-DELTA takes only timedelta")
+        if len(parts) == 1:
+            first = parts[0].lower()
+            if first == "off":
+                self.delay_between_actions = None
+                return
+            elif first == "random":
+                self.delay_between_actions = (0.2, 1)  # between 0.2 and 1.0 second
+                return
 
-        n_params = len(delays)
-        dash_index = delays.index('-') if '-' in delays else -1
+        joined = ''.join(parts)
 
-        if n_params == 1 and isinstance(delays[0], str) and delays[0].lower() == "off":  # ACTION-DELTA OFF
-            self.delay_between_actions = None
-        elif n_params == 1 and isinstance(delays[0], str) and delays[0].lower() == "random":  # ACTION-DELTA RANDOM
-            self.delay_between_actions = (0.2, 1)  # between 0.2 and 1.0 second
-        elif not any(isinstance(delay, str) for delay in delays):  # ACTION-DELTA 000ms
-            self.delay_between_actions = sum(delay.total_seconds() for delay in delays)
-        elif delays.count('-') == 1 and 0 < dash_index < n_params:  # ACTION-DELTA 000ms - 000ms
-            middle = delays.index('-')
-            a = sum(delay.total_seconds() for delay in delays[:middle])
-            b = sum(delay.total_seconds() for delay in delays[middle+1:])
-            self.delay_between_actions = (min(a, b), max(a, b))
+        if joined.count('-') == 1:
+            minimum, maximum = map(parse_timedelta, joined.split('-', 1))
+            self.delay_between_actions = (minimum.total_seconds(), maximum.total_seconds())
         else:
-            raise ScriptSyntaxError("Couldn't understand the ACTION-DELAY")
+            self.delay_between_actions = parse_timedelta(joined).total_seconds()
 
     def action_page_load_timeout(self, *deltas: str):
         r"""

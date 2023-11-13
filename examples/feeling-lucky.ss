@@ -14,5 +14,7 @@ PRESS # Reject Cookies
 WAIT-TILL PAGE-LOADED  # after rejecting the page reloads
 TAB 4  # Tab-Through to "Feeling Lucky" button (has no identifier to SELECT)
 PRESS  # Start random search
-SLEEP 30s  # you can interact with the browser here
+WAIT-TILL PAGE-LOADED  # should be clear what it does
+INFO "You can now play with the page"  # print an info message
+WAIT-FOR-USER-INTERRUPT  # you can interact with the browser here
 QUIT  # close the Browser
