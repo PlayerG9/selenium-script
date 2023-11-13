@@ -23,7 +23,7 @@ python3 -m venv .venv
 ### Run examples
 
 ```bash
-# maybe: chmod +x ./selenium-script
+# maybe `chmod +x ./selenium-script` before the first run
 ./selenium-script examples/{name}
 ```
 

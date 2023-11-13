@@ -24,7 +24,10 @@ from selenium.webdriver import (
     Remote as BrowserType,
 )
 from selenium.webdriver.remote.webelement import WebElement, By
-from selenium.common.exceptions import *
+# from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
+# from selenium.common.exceptions import *
 from .exceptions import *
 from .util import *
 from .logging_context import LoggingContext
@@ -41,6 +44,7 @@ class ScriptEngine:
     _browser: t.Optional[BrowserType] = None
     _web_element: t.Optional[WebElement] = None
     delay_between_actions: t.Optional[t.Union[float, t.Tuple[float, float]]] = 0.0
+    wait_for_timeout: float = 60
 
     def __init__(self, source: str, *, debug: bool = False, context: t.Dict[str, t.Any] = None):
         self.debug_mode = debug
@@ -341,11 +345,12 @@ class ScriptEngine:
             input("Press return to continue.")
 
     @staticmethod
-    def action_wait_for(*deltas: dt.timedelta):
+    def action_sleep(*deltas: str):
         r"""
-        wait for x time
+        just wait for a bit
 
-        WAIT-FOR 1s 500ms
+        SLEEP 200ms
+        SLEEP 200ms - 400ms
 
         time units are:
         - ms - milliseconds
@@ -353,11 +358,60 @@ class ScriptEngine:
         - m  - minutes
         - h  - hours (why the hell would you need that? but I don't care)
         """
-        total = sum(delta.total_seconds() for delta in deltas)
-        logging.info(f"Sleeping for {total}s")
+        line = ''.join(deltas)
+        if '-' in line:
+            minimum, maximum = map(parse_timedelta, line.split('-', 1))
+            total = random.uniform(minimum.total_seconds(), maximum.total_seconds())
+        else:
+            total = parse_timedelta(line).total_seconds()
+        logging.info(f"Sleeping for {total:.3}s")
         time.sleep(total)
 
-    action_wait = action_wait_for
+    def action_wait_till(self, what: str, query: str = None):
+        r"""
+        WAIT-TILL ALERT
+        WAIT-TILL NEW-WINDOW
+        WAIT-TILL CLICKABLE
+        WAIT-TILL VISIBLE
+        WAIT-TILL VISIBILITY
+        WAIT-TILL INVISIBILITY
+        WAIT-TILL URL-CHANGE
+        WAIT-TILL URL https://something.com/
+        WAIT-TILL URL-TO-BE https://something.com/
+        WAIT-TILL INTERACTIVE
+        WAIT-TILL LOADED
+        WAIT-TILL PAGE-LOADED
+        """
+        web_element = (By.CSS_SELECTOR, query) if query else self.web_element
+
+        timeout_message = shlex.join(("WAIT-TILL", what.upper(), query))
+
+        negate = False
+        if what.startswith("!"):
+            negate = True
+            what = what[2:]
+
+        condition = dict(
+            element=expected_conditions.presence_of_element_located(web_element),
+            alert=expected_conditions.alert_is_present(),
+            new_window=expected_conditions.new_window_is_opened(self.browser.window_handles),
+            clickable=expected_conditions.element_to_be_clickable(web_element),
+            visible=expected_conditions.visibility_of(web_element),
+            visibility=expected_conditions.visibility_of(web_element),
+            invisibility=expected_conditions.invisibility_of_element(web_element),
+            url_change=expected_conditions.url_changes(self.browser.current_url),
+            url=expected_conditions.url_to_be(query),
+            url_to_be=expected_conditions.url_to_be(query),
+            interactive=lambda driver: driver.execute_script("return document.readyState") == "interactive",
+            loaded=lambda driver: driver.execute_script("return document.readyState") == "complete",
+            page_loaded=lambda driver: driver.execute_script("return document.readyState") == "complete",
+        )[what.lower().replace('-', '_')]
+
+        wait = WebDriverWait(self.browser, timeout=self.wait_for_timeout)
+        if negate:
+            wait.until_not(condition, message=timeout_message)
+        else:
+            wait.until(condition, message=timeout_message)
 
     def action_action_delay(self, *delays: t.Any):
         r"""
@@ -388,23 +442,24 @@ class ScriptEngine:
         else:
             raise ScriptSyntaxError("Couldn't understand the ACTION-DELAY")
 
-    def action_page_load_timeout(self, *deltas: dt.timedelta):
+    def action_page_load_timeout(self, *deltas: str):
         r"""
         set the page-load-timeout.
 
         should only be called once
         """
-        total = sum(delta.total_seconds() for delta in deltas)
-        self.browser.set_page_load_timeout(total)
+        self.browser.set_page_load_timeout(parse_timedelta(''.join(deltas)).total_seconds())
 
-    def action_implicitly_wait(self, *deltas: dt.timedelta):
+    def action_implicitly_wait(self, *deltas: str):
         r"""
         set the implicit wait time when selecting an element
 
         should only be called once
         """
-        total = sum(delta.total_seconds() for delta in deltas)
-        self.browser.implicitly_wait(total)
+        self.browser.implicitly_wait(parse_timedelta(''.join(deltas)).total_seconds())
+
+    def action_wait_for_timeout(self, *deltas: str):
+        self.wait_for_timeout = parse_timedelta(''.join(deltas)).total_seconds()
 
     # ---------------------------------------------------------------------------------------------------------------- #
 

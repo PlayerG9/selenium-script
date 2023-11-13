@@ -8,7 +8,11 @@ import datetime as dt
 from ..exceptions import ScriptValueError
 
 
-__all__ = ['parse', 'parse_string', 'parse_int', 'parse_number', 'parse_bool', 'PARSE_MAP']
+__all__ = [
+    'parse',
+    'parse_string', 'parse_int', 'parse_number', 'parse_bool', 'parse_timedelta',
+    'PARSE_MAP',
+]
 
 
 UNIT2FACTOR: t.Dict[str, float] = dict(
@@ -21,7 +25,9 @@ UNIT2FACTOR: t.Dict[str, float] = dict(
 __RE_INT = re.compile(r'(?P<digits>\d+)')
 __RE_NUMBER = re.compile(r'(?P<number>\d*.\d+)')
 __RE_BOOLEAN = re.compile(r'(?P<true>true|yes|on)|(?P<false>false|no|off)')
-__RE_DELTA = re.compile(rf'(?P<amount>\d+|\d*.\d+)(?P<unit>(?:{"|".join(UNIT2FACTOR.keys())})+)')
+__RE_TIMEDELTA = re.compile(rf'(?:(?:\d+|\d*.\d+)(?:{"|".join(UNIT2FACTOR.keys())}))+')
+__RE_TIMEDELTA_SPLIT = re.compile(rf'((?:\d+|\d*.\d+)(?:{"|".join(UNIT2FACTOR.keys())}))')
+__RE_SINGLE_TIMEDELTA = re.compile(rf'(?P<amount>\d+|\d*.\d+)(?P<unit>(?:{"|".join(UNIT2FACTOR.keys())}))')
 
 
 def parse(string: str) -> t.Any:
@@ -34,9 +40,13 @@ def parse(string: str) -> t.Any:
     boolean_match = __RE_BOOLEAN.fullmatch(string)
     if boolean_match:
         return boolean_match.group('true') is not None
-    timedelta_match = __RE_DELTA.fullmatch(string)
+    timedelta_match = __RE_TIMEDELTA.fullmatch(string)
     if timedelta_match:
-        return dt.timedelta(seconds=float(timedelta_match.group("amount")) * UNIT2FACTOR[timedelta_match.group("unit")])
+        parts = __RE_TIMEDELTA_SPLIT.split(string)
+        return dt.timedelta(seconds=sum(
+            float(match.group("amount")) * UNIT2FACTOR[match.group("unit")]
+            for match in map(__RE_SINGLE_TIMEDELTA.fullmatch, parts)
+        ))
     return parse_string(string)
 
 
@@ -69,10 +79,14 @@ def parse_bool(string: str) -> bool:
 
 
 def parse_timedelta(string: str) -> dt.timedelta:
-    match = __RE_DELTA.fullmatch(string)
-    if match is None:
+    timedelta_match = __RE_TIMEDELTA.fullmatch(string)
+    if timedelta_match is None:
         raise ScriptValueError(f"Can't parse to timedelta: {string!r}")
-    return dt.timedelta(seconds=float(match.group("amount")) * UNIT2FACTOR[match.group("unit")])
+    parts = [p for p in __RE_TIMEDELTA_SPLIT.split(string) if p]
+    return dt.timedelta(seconds=sum(
+        float(match.group("amount")) * UNIT2FACTOR[match.group("unit")]
+        for match in map(__RE_SINGLE_TIMEDELTA.fullmatch, parts)
+    ))
 
 
 PARSE_MAP: t.Dict[t.Type, t.Callable[[str], t.Any]] = {
