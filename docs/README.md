@@ -1,5 +1,11 @@
 # Documentation
 
+Read this documentation for a quit intro
+
+Read the [actions](./actions.md) for what can be done
+
+Read the [how-to](./how-to.md) for how to do common things
+
 ## "Hello World" Script
 
 ```bash
