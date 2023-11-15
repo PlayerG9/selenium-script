@@ -39,6 +39,8 @@ KEYS_CONTEXT = {
     if name.isupper()
 }
 Token = namedtuple("Tokens", ('filename', 'line', 'action', 'arguments'))
+MacroFunction = t.Callable[[t.TextIO, int, t.Tuple[str, ...]], t.Optional[t.List[Token]]]
+ActionFunction = t.Callable[[t.Any, ...], None]
 
 
 class ScriptEngine:
@@ -79,7 +81,7 @@ class ScriptEngine:
 
             if action_name.startswith("@"):
                 macro_name = action_name.removeprefix("@")
-                macro = getattr(self, f'macro_{macro_name}')
+                macro: MacroFunction = getattr(self, f'macro_{macro_name}')
                 macro_tokens = macro(source, line_number, args)
                 if macro_tokens is not None:
                     tokens.extend(macro_tokens)
@@ -87,7 +89,7 @@ class ScriptEngine:
                     any_error = True
                 continue
 
-            action = getattr(self, f'action_{action_name}', None)
+            action: ActionFunction = getattr(self, f'action_{action_name}', None)
             if action is None:
                 any_error = True
                 logging.error(f"line {line_number}: unknown action {action_raw!r}")
@@ -153,6 +155,7 @@ class ScriptEngine:
         filled_arguments = [fill(arg, context=context) for arg in arguments]
         self.call_function_with_arguments(function=function, arguments=filled_arguments)
 
+    # todo: move with validate to own package/file
     @staticmethod
     def call_function_with_arguments(function: t.Callable, arguments: t.List[str]):
         args = []
