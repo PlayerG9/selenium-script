@@ -30,6 +30,7 @@ from selenium.webdriver.support import expected_conditions
 from selenium.common.exceptions import *
 from .exceptions import *
 from .util import *
+from .callutil import *
 from .logging_context import LoggingContext
 
 
@@ -153,34 +154,7 @@ class ScriptEngine:
     def call_action(self, action_name: str, arguments: t.Tuple[str, ...], context: t.Dict[str, t.Any]):
         function = getattr(self, f'action_{action_name}')
         filled_arguments = [fill(arg, context=context) for arg in arguments]
-        self.call_function_with_arguments(function=function, arguments=filled_arguments)
-
-    # todo: move with validate to own package/file
-    @staticmethod
-    def call_function_with_arguments(function: t.Callable, arguments: t.List[str]):
-        args = []
-        signature = inspect.signature(function)
-
-        for index, parameter in enumerate(signature.parameters.values()):
-            parameter: inspect.Parameter
-            if parameter.annotation == parameter.empty:
-                parser = parse_string
-            else:
-                parser = PARSE_MAP[parameter.annotation]
-            if parameter.kind == parameter.VAR_POSITIONAL:
-                values = arguments[index:]
-                args.extend(map(parser, values))
-                break
-            else:
-                try:
-                    value = arguments[index]
-                except IndexError as error:
-                    if parameter.default is parameter.empty:
-                        raise error
-                else:
-                    args.append(parser(value))
-
-        return function(*args)
+        call_function_with_arguments(function=function, arguments=filled_arguments)
 
     def wait_action_delay(self):
         if self.delay_between_actions is None:
