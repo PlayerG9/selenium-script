@@ -41,9 +41,10 @@ def configure_logging():
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
             self.scriptLine = "---"
+            self.scriptName = "<unknown>"
 
     logging.basicConfig(
-        format="{asctime} | {levelname:.3} | {scriptLine:>3} | {message}",
+        format="{asctime} | {levelname:.3} | {scriptName:>15} | {scriptLine:>3} | {message}",
         style="{",
         level=args.logging or (logging.DEBUG if args.debug else logging.INFO),
     )

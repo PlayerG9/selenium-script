@@ -9,6 +9,7 @@ import random
 import inspect
 import logging
 import typing as t
+from collections import namedtuple
 from dotenv import dotenv_values
 from selenium.webdriver import (
     Keys,
@@ -37,6 +38,7 @@ KEYS_CONTEXT = {
     for name in dir(Keys)
     if name.isupper()
 }
+Token = namedtuple("Tokens", ('filename', 'line', 'action', 'arguments'))
 
 
 class ScriptEngine:
@@ -44,6 +46,11 @@ class ScriptEngine:
     _web_element: t.Optional[WebElement] = None
     delay_between_actions: t.Optional[t.Union[float, t.Tuple[float, float]]] = 0.0
     wait_for_timeout: float = 60
+
+    debug_mode: bool
+    source: str
+    tokens: t.List[Token]
+    context: t.Dict[str, t.Any]
 
     def __init__(self, source: str, *, debug: bool = False, context: t.Dict[str, t.Any] = None):
         self.debug_mode = debug
@@ -58,47 +65,72 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def compile(self, source: t.TextIO) -> t.List:
-        tokens = []
+    def compile(self, source: t.TextIO) -> t.List[Token]:
+        tokens: t.List[Token] = []
         any_error = False
 
         for line_index, line in enumerate(source):
+            line_number = line_index + 1
             line: str = line.strip()
             if not line or line.startswith("#"):
                 continue
             action_raw, *args = shlex.split(line, comments=True)
-            action = format_action(action_raw)
-            function = getattr(self, f'action_{action}', None)
-            if function is None:
-                any_error = True
-                logging.error(f"line {line_index + 1}: unknown action {action_raw!r}")
+            action_name = format_action(action_raw)
+
+            if action_name.startswith("@"):
+                macro_name = action_name.removeprefix("@")
+                macro = getattr(self, f'macro_{macro_name}')
+                macro_tokens = macro(source, line_number, args)
+                if macro_tokens is not None:
+                    tokens.extend(macro_tokens)
+                else:
+                    any_error = True
                 continue
-            signature = inspect.signature(function)
+
+            action = getattr(self, f'action_{action_name}', None)
+            if action is None:
+                any_error = True
+                logging.error(f"line {line_number}: unknown action {action_raw!r}")
+                continue
+            signature = inspect.signature(action)
             if (
                 len(args) > len(signature.parameters)
                 and not any(param.kind == param.VAR_POSITIONAL for param in signature.parameters.values())
             ):
                 any_error = True
-                logging.error(f"line {line_index + 1}: too many parameters "
-                              f"({action} {' '.join(signature.parameters.keys())})")
+                logging.error(f"line {line_number}: too many parameters "
+                              f"({action_name} {' '.join(signature.parameters.keys())})")
                 continue
             # this transforms '\\n' to '\n'
             args = tuple(arg.encode('utf-8', 'replace').decode('unicode_escape') for arg in args)
-            tokens.append((line_index + 1, action, args))
+            tokens.append(Token(os.path.basename(source.name), line_number, action_name, args))
 
         if any_error:
             logging.critical("Script failed during compilation")
             raise QuietExit(1)
         return tokens
 
+    def macro_include(self, source: t.TextIO, line_number: int, args: t.Tuple[str, ...]) -> t.Optional[t.List[Token]]:
+        tokens: t.List[Token] = []
+        include_fp = os.path.join(os.path.dirname(source.name), *args)
+        try:
+            with open(include_fp) as included_script:
+                tokens.extend(self.compile(included_script))
+        except FileNotFoundError:
+            logging.error(f"line {line_number}: script {include_fp!r} not found")
+            return None
+        except QuietExit:
+            return None
+        return tokens
+
     # ---------------------------------------------------------------------------------------------------------------- #
 
     def execute(self):
         try:
-            for line, action, args in self.tokens:
-                with LoggingContext(scriptLine=line):
+            for script_name, current_line, action_name, args in self.tokens:
+                with LoggingContext(scriptName=script_name, scriptLine=current_line):
                     try:
-                        self.call_action(action=action, arguments=args, context=self.context)
+                        self.call_action(action_name=action_name, arguments=args, context=self.context)
                     except ScriptRuntimeError as error:
                         logging.critical(f"{type(error).__name__}: {error}")
                         raise QuietExit(1)
@@ -116,11 +148,15 @@ class ScriptEngine:
                 logging.warning("Abnormally quitting the browser")
                 self._browser.quit()
 
-    def call_action(self, action: str, arguments: t.Tuple[str, ...], context: t.Dict[str, t.Any]):
-        args = []
-        function = getattr(self, f'action_{action}')
-        signature = inspect.signature(function)
+    def call_action(self, action_name: str, arguments: t.Tuple[str, ...], context: t.Dict[str, t.Any]):
+        function = getattr(self, f'action_{action_name}')
         filled_arguments = [fill(arg, context=context) for arg in arguments]
+        self.call_function_with_arguments(function=function, arguments=filled_arguments)
+
+    @staticmethod
+    def call_function_with_arguments(function: t.Callable, arguments: t.List[str]):
+        args = []
+        signature = inspect.signature(function)
 
         for index, parameter in enumerate(signature.parameters.values()):
             parameter: inspect.Parameter
@@ -129,12 +165,12 @@ class ScriptEngine:
             else:
                 parser = PARSE_MAP[parameter.annotation]
             if parameter.kind == parameter.VAR_POSITIONAL:
-                values = filled_arguments[index:]
+                values = arguments[index:]
                 args.extend(map(parser, values))
                 break
             else:
                 try:
-                    value = filled_arguments[index]
+                    value = arguments[index]
                 except IndexError as error:
                     if parameter.default is parameter.empty:
                         raise error
