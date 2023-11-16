@@ -137,9 +137,9 @@ class ScriptEngine:
                     except ScriptRuntimeError as error:
                         logging.critical(f"{type(error).__name__}: {error}")
                         raise QuietExit(1)
-                    except Exception as error:
-                        logging.critical(f"Internal Error: {type(error).__name__} ({error})", exc_info=error)
-                        raise QuietExit(1)
+                    # except Exception as error:
+                    #     logging.critical(f"Internal Error: {type(error).__name__} ({error})", exc_info=error)
+                    #     raise QuietExit(1)
                 self.wait_action_delay()
         except BaseException as exception:
             if self.debug_mode:

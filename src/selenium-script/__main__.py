@@ -7,6 +7,7 @@ import logging
 import typing as t
 import os.path as p
 import argparse as ap
+import better_exceptions
 from . import (
     __version__ as interpreter_version,
     ScriptEngine,
@@ -16,6 +17,9 @@ from .exceptions import *
 
 
 class Namespace:
+    def __repr__(self):
+        return f"<{vars(self)}>"
+
     debug: bool
     logging: t.Literal["DEBUG", "INFO", "WARN", "WARNING", "ERROR", "CRITICAL"]
     script: str
@@ -53,17 +57,26 @@ def configure_logging():
         if not args.debug:  # disable logging of other modules if not in debug-mode
             handler.addFilter(logging.Filter(name="root"))
         handler.addFilter(LoggingContextFilter())
+    better_exceptions.log.patch()
 
 
 def main():
+    better_exceptions.hook()
     configure_logging()
-    logging.debug(str(vars(args)))
+    logging.debug(str(args))
 
-    engine = ScriptEngine(args.script, debug=args.debug)
+    try:
+        engine = ScriptEngine(args.script, debug=args.debug)
+    except FileNotFoundError:
+        logging.critical(f"script-file {args.script!r} could not be found")
+        return 1
     try:
         engine.execute()
     except ScriptRuntimeError as error:
         logging.critical(f"{type(error).__name__}: {error}")
+        return 1
+    except Exception as error:
+        logging.critical(f"Internal Error: {type(error).__name__} ({error})", exc_info=error)
         return 1
     return 0
 
