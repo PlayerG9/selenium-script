@@ -170,7 +170,7 @@ class ScriptEngine:
     @property
     def browser(self) -> BrowserType:
         if self._browser is None:
-            raise ScriptRuntimeError("you need to run `INIT browser` to initialize the browser")
+            raise ScriptRuntimeError("you need to run `INIT {browser}` to initialize the browser")
         return self._browser
 
     @property
@@ -229,7 +229,7 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_init(self, browser: str, *arguments: str):
+    def action_init(self, browser: str, *, headless: bool):
         r"""
         initialize the browser
 
@@ -244,8 +244,7 @@ class ScriptEngine:
         common arguments could be:
         --headless
         """
-        logging.info(f"Initializing {browser!r} browser "
-                     f"with {' '.join(map(repr, arguments)) if arguments else 'no arguments'}")
+        logging.info(f"Initializing {'headless' if headless else ''} {browser!r} browser")
         browsers = dict(
             chrome=(ChromeBrowser, ChromeOptions),
             firefox=(FirefoxBrowser, FirefoxOptions),
@@ -259,8 +258,8 @@ class ScriptEngine:
         except KeyError:
             raise ScriptValueError(f"unknown browser {browser!r} ({'|'.join(browsers.keys())})")
         options = options_class()
-        for argument in arguments:
-            options.add_argument(argument)
+        if headless:
+            options.add_argument('--headless')
         self._browser = browser_class(
             options=options,
         )
