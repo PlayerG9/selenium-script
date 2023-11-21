@@ -24,7 +24,6 @@ from selenium.webdriver import (
     Remote as BrowserType,
 )
 from selenium.webdriver.remote.webelement import WebElement, By
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.common.exceptions import *
@@ -175,9 +174,19 @@ class ScriptEngine:
 
     @property
     def web_element(self) -> WebElement:
-        if self._web_element is not None:
-            return self._web_element
-        return self.browser.switch_to.active_element
+        try:
+            return self.browser.switch_to.active_element
+        except NoSuchWindowException:
+            raise ScriptRuntimeError("Browser is already closed")
+
+    @web_element.setter
+    def web_element(self, value: t.Optional[WebElement]):
+        r"""sets the current element and focuses it"""
+        self._web_element = value
+        if self._web_element:
+            self.browser.execute_script("arguments[0].focus()", self._web_element)
+        else:
+            self.browser.execute_script("document.documentElement.focus()")
 
     ####################################################################################################################
     # Actions
@@ -295,47 +304,43 @@ class ScriptEngine:
     def action_select(self, query: str, *extra: str):
         r"""select an element"""
         query = ' '.join((query,) + extra)
-        self._web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=query)
-        ActionChains(self.browser).click(self.web_element).perform()
+        self.web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=query)
 
     def action_waiting_select(self, query: str, *extra: str):
         r"""Like SELECT but waits for the element"""
         query = ' '.join((query,) + extra)
-        self._web_element = WebDriverWait(self.browser, timeout=self.wait_for_timeout).until(
+        self.web_element = WebDriverWait(self.browser, timeout=self.wait_for_timeout).until(
             expected_conditions.presence_of_element_located((By.CSS_SELECTOR, query))
         )
-        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_select_name(self, name: str):
         r"""SELECT '[name="value"]'"""
-        self._web_element = self.browser.find_element(by=By.NAME, value=name)
-        ActionChains(self.browser).click(self.web_element).perform()
+        self.web_element = self.browser.find_element(by=By.NAME, value=name)
 
     def action_select_xpath(self, xpath: str):
         r"""select element by xpath"""
-        self._web_element = self.browser.find_element(by=By.XPATH, value=xpath)
-        ActionChains(self.browser).click(self.web_element).perform()
+        self.web_element = self.browser.find_element(by=By.XPATH, value=xpath)
 
     def action_select_link_text(self, *text: str):
         r"""Select link that contains text"""
-        self._web_element.find_element(by=By.LINK_TEXT, value=' '.join(text))
-        ActionChains(self.browser).click(self.web_element).perform()
+        self.web_element.find_element(by=By.LINK_TEXT, value=' '.join(text))
 
     def action_select_link_partial_text(self, *text: str):
         r"""select link that contains partially text"""
-        self._web_element.find_element(by=By.PARTIAL_LINK_TEXT, value=' '.join(text))
-        ActionChains(self.browser).click(self.web_element).perform()
+        self.web_element.find_element(by=By.PARTIAL_LINK_TEXT, value=' '.join(text))
 
-    def action_unselect(self):
+    def action_unselect(self, *, unfocus: bool = True):
         r"""unselect the current element"""
-        self._web_element = None
+        if unfocus:
+            self.web_element = None
+        else:
+            self._web_element = None
 
     def select_child(self, *query: str):
         r"""select a child element"""
         if not query:
             raise ScriptSyntaxError("Missing query selector for SELECT-CHILD")
-        self._web_element = self.web_element.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
-        ActionChains(self.browser).click(self.web_element).perform()
+        self.web_element = self.web_element.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
