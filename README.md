@@ -24,6 +24,7 @@ WAIT-TILL PAGE-LOADED  # ensure page is fully loaded
 TAB 4  # Tab-Through to Reject-Cookies button (has no identifier to SELECT)
 PRESS # Reject Cookies
 WAIT-TILL PAGE-LOADED  # after rejecting the page reloads
+SELECT textarea
 TAB 4  # Tab-Through to "Feeling Lucky" button (has no identifier to SELECT)
 PRESS  # Start random search
 WAIT-TILL PAGE-LOADED  # should be clear what it does
