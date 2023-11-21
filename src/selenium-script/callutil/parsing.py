@@ -5,12 +5,11 @@ r"""
 import re
 import typing as t
 import datetime as dt
-from ..exceptions import ScriptValueError
+from ..exceptions import ScriptValueParsingError
 
 
 __all__ = [
-    'parse',
-    'parse_string', 'parse_int', 'parse_number', 'parse_bool', 'parse_timedelta',
+    'parse_any', 'parse_string', 'parse_int', 'parse_number', 'parse_bool', 'parse_timedelta',
     'PARSE_MAP',
 ]
 
@@ -34,7 +33,7 @@ __RE_TIMEDELTA_SPLIT = re.compile(rf'((?:\d+|\d*.\d+)(?:{"|".join(UNIT2FACTOR.ke
 __RE_SINGLE_TIMEDELTA = re.compile(rf'(?P<amount>\d+|\d*.\d+)(?P<unit>(?:{"|".join(UNIT2FACTOR.keys())}))')
 
 
-def parse(string: str) -> t.Any:
+def parse_any(string: str) -> t.Any:
     int_match = __RE_INT.fullmatch(string)
     if int_match:
         return int(int_match.group('digits'))
@@ -62,14 +61,14 @@ def parse_int(string: str) -> int:
     try:
         return int(string)
     except ValueError:
-        raise ScriptValueError(f"Can't parse to integer: {string!r}")
+        raise ScriptValueParsingError(f"Can't parse to integer: {string!r}")
 
 
 def parse_number(string: str) -> float:
     try:
         return float(string)
     except ValueError:
-        raise ScriptValueError(f"Can't parse to number: {string!r}")
+        raise ScriptValueParsingError(f"Can't parse to number: {string!r}")
 
 
 def parse_bool(string: str) -> bool:
@@ -79,13 +78,13 @@ def parse_bool(string: str) -> bool:
     elif string in {'false', 'no', 'off', '0'}:
         return False
     else:
-        raise ScriptValueError(f"Can't parse to boolean: {string!r}")
+        raise ScriptValueParsingError(f"Can't parse to boolean: {string!r}")
 
 
 def parse_timedelta(string: str) -> dt.timedelta:
     timedelta_match = __RE_TIMEDELTA.fullmatch(string)
     if timedelta_match is None:
-        raise ScriptValueError(f"Can't parse to timedelta: {string!r}")
+        raise ScriptValueParsingError(f"Can't parse to timedelta: {string!r}")
     parts = filtertrue(__RE_TIMEDELTA_SPLIT.split(string))
     return dt.timedelta(seconds=sum(
         float(match.group("amount")) * UNIT2FACTOR[match.group("unit")]
@@ -100,5 +99,5 @@ PARSE_MAP: t.Dict[t.Type, t.Callable[[str], t.Any]] = {
     bool: parse_bool,
     dt.timedelta: parse_timedelta,
     #
-    t.Any: parse,
+    t.Any: parse_any,
 }

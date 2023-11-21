@@ -8,9 +8,9 @@ __all__ = [
     'QuietExit',
     'SeleniumScriptError',
     'ScriptCompileError',
-    'ScriptSyntaxError', 'ScriptUnsupportedTokenError',
+    'ScriptSyntaxError', 'ScriptUnknownActionError',
     'ScriptRuntimeError',
-    'ScriptValueError', 'ScriptMissingVariableError',
+    'ScriptValueParsingError', 'ScriptTypeError', 'ScriptUnknownVariableError',
 ]
 
 
@@ -33,7 +33,7 @@ class ScriptCompileError(SeleniumScriptError):
     pass
 
 
-class ScriptUnsupportedTokenError(ScriptCompileError):
+class ScriptUnknownActionError(ScriptCompileError):
     pass
 
 
@@ -48,9 +48,13 @@ class ScriptSyntaxError(ScriptRuntimeError):
     pass
 
 
-class ScriptValueError(ScriptRuntimeError):
+class ScriptTypeError(ScriptRuntimeError):
     pass
 
 
-class ScriptMissingVariableError(ScriptRuntimeError):
+class ScriptValueParsingError(ScriptRuntimeError):
+    pass
+
+
+class ScriptUnknownVariableError(ScriptRuntimeError):
     pass

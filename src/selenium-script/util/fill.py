@@ -4,7 +4,7 @@ r"""
 """
 import re
 import typing as t
-from ..exceptions import ScriptMissingVariableError
+from ..exceptions import ScriptUnknownVariableError
 
 
 __all__ = ['fill']
@@ -27,7 +27,7 @@ def fill(string: str, context: t.Dict[str, t.Any]) -> str:
             value = context[name]
         except KeyError as err:
             print([string, name, err])
-            raise ScriptMissingVariableError(name)
+            raise ScriptUnknownVariableError(name)
         else:
             return "" if value is None else str(value)
 

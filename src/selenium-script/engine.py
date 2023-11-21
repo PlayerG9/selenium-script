@@ -24,7 +24,7 @@ from selenium.webdriver import (
     Remote as BrowserType,
 )
 from selenium.webdriver.remote.webelement import WebElement, By
-# from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.common.exceptions import *
@@ -229,7 +229,7 @@ class ScriptEngine:
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
-    def action_init(self, browser: str, *arguments: str):
+    def action_init(self, browser: str, *, headless: bool = False):
         r"""
         initialize the browser
 
@@ -244,8 +244,7 @@ class ScriptEngine:
         common arguments could be:
         --headless
         """
-        logging.info(f"Initializing {browser!r} browser "
-                     f"with {' '.join(map(repr, arguments)) if arguments else 'no arguments'}")
+        logging.info(f"Initializing {'headless' if headless else ''} {browser!r} browser")
         browsers = dict(
             chrome=(ChromeBrowser, ChromeOptions),
             firefox=(FirefoxBrowser, FirefoxOptions),
@@ -257,16 +256,26 @@ class ScriptEngine:
             browser_class: t.Type[ChromeBrowser]
             options_class: t.Type[ChromeOptions]
         except KeyError:
-            raise ScriptValueError(f"unknown browser {browser!r} ({'|'.join(browsers.keys())})")
+            raise ScriptValueParsingError(f"unknown browser {browser!r} ({'|'.join(browsers.keys())})")
         options = options_class()
-        for argument in arguments:
-            options.add_argument(argument)
+        if headless:
+            options.add_argument('--headless')
         self._browser = browser_class(
             options=options,
         )
 
+    def action_new_tab(self):
+        r"""opens a new tab"""
+        logging.info("Opening a new tab")
+        self.browser.switch_to.new_window("tab")
+
+    def action_new_window(self):
+        r"""opens a new window"""
+        logging.info("Opening a new window")
+        self.browser.switch_to.new_window("window")
+
     def action_close(self):
-        r"""close the current window"""
+        r"""close the current window/tab"""
         logging.info("Closing the current window")
         self.browser.close()
 
@@ -287,6 +296,7 @@ class ScriptEngine:
         r"""select an element"""
         query = ' '.join((query,) + extra)
         self._web_element = self.browser.find_element(by=By.CSS_SELECTOR, value=query)
+        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_waiting_select(self, query: str, *extra: str):
         r"""Like SELECT but waits for the element"""
@@ -294,22 +304,27 @@ class ScriptEngine:
         self._web_element = WebDriverWait(self.browser, timeout=self.wait_for_timeout).until(
             expected_conditions.presence_of_element_located((By.CSS_SELECTOR, query))
         )
+        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_select_name(self, name: str):
         r"""SELECT '[name="value"]'"""
         self._web_element = self.browser.find_element(by=By.NAME, value=name)
+        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_select_xpath(self, xpath: str):
         r"""select element by xpath"""
         self._web_element = self.browser.find_element(by=By.XPATH, value=xpath)
+        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_select_link_text(self, *text: str):
         r"""Select link that contains text"""
         self._web_element.find_element(by=By.LINK_TEXT, value=' '.join(text))
+        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_select_link_partial_text(self, *text: str):
         r"""select link that contains partially text"""
         self._web_element.find_element(by=By.PARTIAL_LINK_TEXT, value=' '.join(text))
+        ActionChains(self.browser).click(self.web_element).perform()
 
     def action_unselect(self):
         r"""unselect the current element"""
@@ -320,6 +335,7 @@ class ScriptEngine:
         if not query:
             raise ScriptSyntaxError("Missing query selector for SELECT-CHILD")
         self._web_element = self.web_element.find_element(by=By.CSS_SELECTOR, value=' '.join(query))
+        ActionChains(self.browser).click(self.web_element).perform()
 
     # ---------------------------------------------------------------------------------------------------------------- #
 
